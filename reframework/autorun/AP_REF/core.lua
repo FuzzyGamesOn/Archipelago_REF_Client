@@ -12,22 +12,22 @@ AP_REF.APItemsHandling = 7 -- shouldn't need to change this
 AP_REF.APTags = {} -- these are reserved for any additional tags, Lua-APClientPP is always applied, and TextOnly when relevant
 
 AP_REF.APColors = {
-    red="EE0000",
-    blue="6495ED",
-    green="00FF7F",
-    yellow="FAFAD2",
-    cyan="00EEEE",
-    magenta="EE00EE",
-    black="000000",
-    white="FFFFFF",
-    red_bg="FF0000",
-    blue_bg="0000FF",
-    green_bg="00FF00",
-    yellow_bg="FFFF00",
-    cyan_bg="00FFFF",
-    magenta_bg="FF00FF",
-    black_bg="000000",
-    white_bg="FFFFFF"
+	red="EE0000",
+	blue="6495ED",
+	green="00FF7F",
+	yellow="FAFAD2",
+	cyan="00EEEE",
+	magenta="EE00EE",
+	black="000000",
+	white="FFFFFF",
+	red_bg="FF0000",
+	blue_bg="0000FF",
+	green_bg="00FF00",
+	yellow_bg="FFFF00",
+	cyan_bg="00FFFF",
+	magenta_bg="FF00FF",
+	black_bg="000000",
+	white_bg="FFFFFF"
 }
 
 local function setDefault (t, d)
@@ -53,12 +53,23 @@ function AP_REF.HexToImguiColor(color)
 	return tonumber("FF"..b..g..r, 16)
 end
 
+function AP_REF.GetDefaultTags()
+	local tags = {"Lua-APClientPP"}
+
+	if AP_REF.APGameName == "" then
+		table.insert(tags, "TextOnly")
+	end
+
+	return tags
+end
+
 -----------------------------------
 
 -- Utilize at your own peril
 AP_REF.APClient = nil
 -----------------------------------
 
+-- connection config settings
 local host = "localhost:38281"
 local slot = "Player1"
 local password = ""
@@ -168,7 +179,7 @@ local function parse_json_msg(val)
 		end
 		return {text = text, color = color}
 	else
-		return {text = val["text"], color = AP_REF.HexToImguiColor("FFFFFF")}
+		return {text = val["text"]}
 	end
 end
 
@@ -218,14 +229,10 @@ local function set_room_info_handler(callback)
 	function room_info_handler()
 		debug_print("Room info")
 		callback()
-		local tags = {"Lua-APClientPP"}
-		if AP_REF.APGameName == "" then
-			table.insert(tags, "TextOnly")
-		end
-		for i, val in ipairs(AP_REF.APTags) do
-			table.insert(tags, val)
-		end
-		AP_REF.APClient:ConnectSlot(slot, password, AP_REF.APItemsHandling, tags, {0, 3, 9})
+
+		local tags = AP_REF.GetDefaultTags()
+
+		AP_REF.APClient:ConnectSlot(slot, password, AP_REF.APItemsHandling, tags, {0, 4, 4})
 	end
 	AP_REF.APClient:set_room_info_handler(room_info_handler)
 end
@@ -233,11 +240,25 @@ local function set_slot_connected_handler(callback)
 	function slot_connected_handler(slot_data)
 		debug_print("Slot connected")
 		callback(slot_data)
+
+		-- no point in sending a connectupdate if we don't have any custom tags to go in it
+		if #AP_REF.APTags > 0 then
+			local tags = AP_REF.GetDefaultTags()
+
+			-- adding the tags in slot connected versus room info 
+			--   allows the game mod to apply tags (like deathlink) based on slot data
+			for i, val in ipairs(AP_REF.APTags) do
+				table.insert(tags, val)
+			end
+
+			AP_REF.APClient:ConnectUpdate(nil, tags) -- set any new tags
+		end
 	end
 	AP_REF.APClient:set_slot_connected_handler(slot_connected_handler)
 end
 local function set_slot_refused_handler(callback)
 	function slot_refused_handler(reasons)
+		table.insert(textLog, {{text = table.concat(reasons, ", ")}})
 		debug_print("Slot refused: " .. table.concat(reasons, ", "))
 		callback(reasons)
 		disconnect_client = true
@@ -276,7 +297,7 @@ local function set_print_handler(callback)
 	function print_handler(msg)
 		debug_print("Print")
 		callback(msg)
-		table.insert(textLog, {{text = msg, color = AP_REF.HexToImguiColor("FFFFFF")}})
+		table.insert(textLog, {{text = msg}})
 		--debug_print(msg)
 	end
 	AP_REF.APClient:set_print_handler(print_handler)
@@ -316,24 +337,25 @@ local function set_set_reply_handler(callback)
 end
 
 function APConnect(host)
-    local uuid = ""
-    AP_REF.APClient = AP(uuid, AP_REF.APGameName, host)
+	local uuid = ""
+	AP_REF.APClient = AP(uuid, AP_REF.APGameName, host)
+	table.insert(textLog, {{ text = "Connecting..." }})
 	debug_print("Connecting")
-    set_socket_connected_handler(AP_REF.on_socket_connected)
-    set_socket_error_handler(AP_REF.on_socket_error)
-    set_socket_disconnected_handler(AP_REF.on_socket_disconnected)
-    set_room_info_handler(AP_REF.on_room_info)
-    set_slot_connected_handler(AP_REF.on_slot_connected)
-    set_slot_refused_handler(AP_REF.on_slot_refused)
-    set_items_received_handler(AP_REF.on_items_received)
-    set_location_info_handler(AP_REF.on_location_info)
-    set_location_checked_handler(AP_REF.on_location_checked)
-    set_data_package_changed_handler(AP_REF.on_data_package_changed)
-    set_print_handler(AP_REF.on_print)
-    set_print_json_handler(AP_REF.on_print_json)
-    set_bounced_handler(AP_REF.on_bounced)
-    set_retrieved_handler(AP_REF.on_retrieved)
-    set_set_reply_handler(AP_REF.on_set_reply)
+	set_socket_connected_handler(AP_REF.on_socket_connected)
+	set_socket_error_handler(AP_REF.on_socket_error)
+	set_socket_disconnected_handler(AP_REF.on_socket_disconnected)
+	set_room_info_handler(AP_REF.on_room_info)
+	set_slot_connected_handler(AP_REF.on_slot_connected)
+	set_slot_refused_handler(AP_REF.on_slot_refused)
+	set_items_received_handler(AP_REF.on_items_received)
+	set_location_info_handler(AP_REF.on_location_info)
+	set_location_checked_handler(AP_REF.on_location_checked)
+	set_data_package_changed_handler(AP_REF.on_data_package_changed)
+	set_print_handler(AP_REF.on_print)
+	set_print_json_handler(AP_REF.on_print_json)
+	set_bounced_handler(AP_REF.on_bounced)
+	set_retrieved_handler(AP_REF.on_retrieved)
+	set_set_reply_handler(AP_REF.on_set_reply)
 end
 
 local function DisplayClientCommand(command)
@@ -348,23 +370,27 @@ local function main_menu()
 	if mainWindowVisible then
 		imgui.set_next_window_size(Vector2f.new(600, 300), 4)
 		if showMainWindow then
-			showMainWindow = imgui.begin_window("Archipelago REFramework", showMainWindow, nil)
+			showMainWindow = imgui.begin_window("Archipelago Client for REFramework", showMainWindow, nil)
 		else
-			imgui.begin_window("Archipelago REFramework", nil, nil)
+			imgui.begin_window("Archipelago Client for REFramework", nil, nil)
 		end
 		local size = imgui.get_window_size()
+		local foo = ""
+		imgui.push_item_width(0.001) -- this makes the input effectively zero-width but preserves the padding for the label
+		imgui.input_text("Host:", foo) -- ^ it's dumb that we have to do this, and I hope imgui one day supports left-side labels (what a joke)
+		imgui.same_line()
 		imgui.push_item_width(size.x / 5)
-		changed, hostname, _1, _2 = imgui.input_text("Host", host)
+		changed, hostname, _1, _2 = imgui.input_text("Slot:", host) -- imgui labels are displayed on the right (WHY?!), so this label is for the NEXT input
 		if changed then
 			host = hostname
 		end
 		imgui.same_line()
-		changed, slotname, _1, _2 = imgui.input_text("Slot", slot)
+		changed, slotname, _1, _2 = imgui.input_text("Password:", slot) -- imgui labels are displayed on the right (WHY?!), so this label is for the NEXT input
 		if changed then
 			slot = slotname
 		end
 		imgui.same_line()
-		changed, pass, _1, _2 = imgui.input_text("Password", password)
+		changed, pass, _1, _2 = imgui.input_text("", password)
 		if changed then
 			password = pass
 		end
@@ -372,6 +398,7 @@ local function main_menu()
 		if connected then
 			if imgui.button("Disconnect") then
 				disconnect_client = true
+				table.insert(textLog, {{ text = "Disconnected." }})
 			end
 		else
 			if imgui.button("Connect") then
@@ -386,6 +413,9 @@ local function main_menu()
 		imgui.push_style_var(14, Vector2f.new(0,0))
 		for i, value in ipairs(textLog) do
 			for i, val in ipairs(value) do
+				if val["color"] == nil then
+					val["color"] = AP_REF.HexToImguiColor("FFFFFF")
+				end
 				imgui.text_colored(val["text"], val["color"])
 				imgui.same_line()
 			end
@@ -418,50 +448,67 @@ local function main_menu()
 end
 
 local function SaveConfig()
-    config = {}
-    config["APCurrentPlayerColor"] = AP_REF.APCurrentPlayerColor
-    config["APOtherPlayerColor"] = AP_REF.APOtherPlayerColor
-    config["APProgessionColor"] = AP_REF.APProgessionColor
-    config["APUsefulColor"] = AP_REF.APUsefulColor
-    config["APFillerColor"] = AP_REF.APFillerColor
-    config["APTrapColor"] = AP_REF.APTrapColor
-    config["APLocationColor"] = AP_REF.APLocationColor
+	config = {}
+	config["APCurrentPlayerColor"] = AP_REF.APCurrentPlayerColor
+	config["APOtherPlayerColor"] = AP_REF.APOtherPlayerColor
+	config["APProgessionColor"] = AP_REF.APProgessionColor
+	config["APUsefulColor"] = AP_REF.APUsefulColor
+	config["APFillerColor"] = AP_REF.APFillerColor
+	config["APTrapColor"] = AP_REF.APTrapColor
+	config["APLocationColor"] = AP_REF.APLocationColor
 	config["APEntranceColor"] = AP_REF.APEntranceColor
-    if not json.dump_file("AP_REF.json", config, 4) then
-        print("Config cannot be saved!")
-    end
+
+	-- store last connection settings so they're restored on game relaunch
+	config["APHost"] = host
+	config["APSlot"] = slot
+	config["APPassword"] = password
+
+	if not json.dump_file("AP_REF.json", config, 4) then
+		print("Config cannot be saved!")
+	end
 end
 
 local function ReadConfig()
-    config = json.load_file("AP_REF.json")
-    if config ~= nil then
-        if config["APCurrentPlayerColor"] ~= nil then
-            AP_REF.APCurrentPlayerColor = config["APCurrentPlayerColor"]
-        end
-        if config["APOtherPlayerColor"] ~= nil then
-            AP_REF.APOtherPlayerColor = config["APOtherPlayerColor"]
-        end
-        if config["APProgessionColor"] ~= nil then
-            AP_REF.APProgessionColor = config["APProgessionColor"]
-        end
-        if config["APUsefulColor"] ~= nil then
-            AP_REF.APUsefulColor = config["APUsefulColor"]
-        end
-        if config["APFillerColor"] ~= nil then
-            AP_REF.APFillerColor = config["APFillerColor"]
-        end
-        if config["APTrapColor"] ~= nil then
-            AP_REF.APTrapColor = config["APTrapColor"]
-        end
-        if config["APLocationColor"] ~= nil then
-            AP_REF.APLocationColor = config["APLocationColor"]
-        end
+	config = json.load_file("AP_REF.json")
+	if config ~= nil then
+		if config["APCurrentPlayerColor"] ~= nil then
+			AP_REF.APCurrentPlayerColor = config["APCurrentPlayerColor"]
+		end
+		if config["APOtherPlayerColor"] ~= nil then
+			AP_REF.APOtherPlayerColor = config["APOtherPlayerColor"]
+		end
+		if config["APProgessionColor"] ~= nil then
+			AP_REF.APProgessionColor = config["APProgessionColor"]
+		end
+		if config["APUsefulColor"] ~= nil then
+			AP_REF.APUsefulColor = config["APUsefulColor"]
+		end
+		if config["APFillerColor"] ~= nil then
+			AP_REF.APFillerColor = config["APFillerColor"]
+		end
+		if config["APTrapColor"] ~= nil then
+			AP_REF.APTrapColor = config["APTrapColor"]
+		end
+		if config["APLocationColor"] ~= nil then
+			AP_REF.APLocationColor = config["APLocationColor"]
+		end
 		if config["APEntranceColor"] ~= nil then
 			AP_REF.APEntranceColor = config["APEntranceColor"]
 		end
-    else
-        SaveConfig()
-    end
+
+		-- save last connection settings so we can restore them when the game is closed and reopened
+		if config["APHost"] ~= nil then
+			host = config["APHost"]
+		end
+		if config["APSlot"] ~= nil then
+			slot = config["APSlot"]
+		end
+		if config["APPassword"] ~= nil then
+			password = config["APPassword"]
+		end
+	else
+		SaveConfig()
+	end
 end
 
 re.on_frame(function()
@@ -470,9 +517,8 @@ re.on_frame(function()
 	end
 end)
 
-
 re.on_draw_ui(function()
-	changed, showWindow = imgui.checkbox("Show Archipelago UI", showMainWindow)
+	changed, showWindow = imgui.checkbox("Show Archipelago Client UI", showMainWindow)
 	if changed then
 		showMainWindow = showWindow
 	end
@@ -487,10 +533,8 @@ end)
 ReadConfig()
 
 re.on_pre_application_entry("UpdateBehavior", function() 
-    --main loop access
-	if reframework:is_drawing_ui() then
-		mainWindowVisible = true
-	elseif showMainWindow then
+	--main loop access
+	if reframework:is_drawing_ui() and showMainWindow then
 		mainWindowVisible = true
 	else
 		mainWindowVisible = false
@@ -512,7 +556,7 @@ re.on_pre_application_entry("UpdateBehavior", function()
 end)
 
 re.on_config_save(function()
-    SaveConfig()
+	SaveConfig()
 end)
 
 return AP_REF
